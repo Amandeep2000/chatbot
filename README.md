@@ -70,6 +70,80 @@ app.get('/event', (req, res) => {
 });
 
 
+//event create
+const express = require('express');
+const { google } = require('googleapis');
+const bodyParser = require('body-parser');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(bodyParser.json());
+
+const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const TOKEN_PATH = path.join(__dirname, 'token.json');
+const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
+
+let oAuth2Client;
+
+fs.readFile(CREDENTIALS_PATH, (err, content) => {
+  if (err) return console.log('Error loading client secret file:', err);
+  authorize(JSON.parse(content));
+});
+
+function authorize(credentials) {
+  const { client_secret, client_id, redirect_uris } = credentials.installed;
+  oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
+
+  fs.readFile(TOKEN_PATH, (err, token) => {
+    if (err) return getAccessToken();
+    oAuth2Client.setCredentials(JSON.parse(token));
+  });
+}
+
+function getAccessToken() {
+  const authUrl = oAuth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: SCOPES,
+  });
+  console.log('Authorize this app by visiting this url:', authUrl);
+}
+
+app.post('/book-appointment', async (req, res) => {
+  const { summary, description, start, end } = req.body;
+
+  const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
+
+  const event = {
+    summary,
+    description,
+    start: {
+      dateTime: start,
+      timeZone: 'America/Los_Angeles',
+    },
+    end: {
+      dateTime: end,
+      timeZone: 'America/Los_Angeles',
+    },
+  };
+
+  try {
+    const response = await calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+    });
+    res.status(200).send(`Event created: ${response.data.htmlLink}`);
+  } catch (error) {
+    res.status(500).send(`Error creating event: ${error}`);
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
 
 
 app.listen(port, () => {
